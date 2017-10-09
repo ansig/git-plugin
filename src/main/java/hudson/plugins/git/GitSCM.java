@@ -23,12 +23,7 @@ import hudson.plugins.git.extensions.GitClientConflictException;
 import hudson.plugins.git.extensions.GitClientType;
 import hudson.plugins.git.extensions.GitSCMExtension;
 import hudson.plugins.git.extensions.GitSCMExtensionDescriptor;
-import hudson.plugins.git.extensions.impl.AuthorInChangelog;
-import hudson.plugins.git.extensions.impl.BuildChooserSetting;
-import hudson.plugins.git.extensions.impl.ChangelogToBranch;
-import hudson.plugins.git.extensions.impl.PathRestriction;
-import hudson.plugins.git.extensions.impl.LocalBranch;
-import hudson.plugins.git.extensions.impl.PreBuildMerge;
+import hudson.plugins.git.extensions.impl.*;
 import hudson.plugins.git.opt.PreBuildMergeOptions;
 import hudson.plugins.git.util.Build;
 import hudson.plugins.git.util.*;
@@ -1221,6 +1216,10 @@ public class GitSCM extends GitSCMBackwardCompatibility {
      * "since the previous build", what we really mean is "since the last build that built the same branch".
      *
      * <p>
+     * If the sparse checkout extension is configured, the changelog will be filtered to only include changes
+     * in the paths that have been checked out.
+     *
+     * <p>
      * TODO: if a branch merge is configured, then the first build will end up listing all the changes
      * in the upstream branch, which may be too many. To deal with this nicely, BuildData needs to remember
      * when we started merging this branch so that we can properly detect if the current build is the
@@ -1267,6 +1266,15 @@ public class GitSCM extends GitSCMBackwardCompatibility {
                 // if we force the changelog, it'll contain all the changes in the repo, which is not what we want.
                 listener.getLogger().println("First time build. Skipping changelog.");
             } else {
+
+                SparseCheckoutPaths sparseCheckoutPaths = getExtensions().get(SparseCheckoutPaths.class);
+                if (sparseCheckoutPaths != null) {
+                    listener.getLogger().println("Getting changelog only for checked out paths");
+                    for (SparseCheckoutPath path : sparseCheckoutPaths.getSparseCheckoutPaths()) {
+                        changelog.path(path.getPath());
+                    }
+                }
+
                 changelog.to(out).max(MAX_CHANGELOG).execute();
                 executed = true;
             }
