@@ -1690,6 +1690,46 @@ public class GitSCMTest extends AbstractGitTestCase {
         assertFalse(build1.getWorkspace().child(commitFile2).exists());
     }
 
+    /**
+     * Asserts that the changelog is filtered to contain only commits that have been
+     * checked out with the sparse checkout extension.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testChangelogWithSparseCheckout() throws Exception {
+
+        if (!sampleRepo.gitVersionAtLeast(1, 7, 10)) {
+            return;
+        }
+
+        FreeStyleProject project = setupProject("master", Lists.newArrayList(new SparseCheckoutPath("comp1")));
+
+        final String comp1File = "comp1/file.txt";
+        final String comp2File = "comp2/file.txt";
+
+        commit(comp1File, UUID.randomUUID().toString(), johnDoe, "First commit in comp1");
+        commit(comp2File, UUID.randomUUID().toString(), johnDoe, "First commit in comp2");
+
+        build(project, Result.SUCCESS);
+
+        commit(comp1File, UUID.randomUUID().toString(), johnDoe, "Second commit in comp1");
+        commit(comp2File, UUID.randomUUID().toString(), johnDoe, "Second commit in comp2");
+        commit(comp1File, UUID.randomUUID().toString(), johnDoe, "Third commit in comp1");
+
+        final FreeStyleBuild build = build(project, Result.SUCCESS);
+
+        List<String> commitMessages = new ArrayList<>();
+        for (ChangeLogSet.Entry entry : build.getChangeSet()) {
+            commitMessages.add(entry.getMsg());
+        }
+
+        assertThat(commitMessages, containsInAnyOrder(
+                "Second commit in comp1",
+                "Third commit in comp1"
+        ));
+    }
+
     @Test
     public void testInitSparseCheckoutBis() throws Exception {
         if (!sampleRepo.gitVersionAtLeast(1, 7, 10)) {
