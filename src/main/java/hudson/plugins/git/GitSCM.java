@@ -18,6 +18,8 @@ import hudson.matrix.MatrixRun;
 import hudson.model.*;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Hudson.MasterComputer;
+import hudson.model.Queue;
+import hudson.model.queue.Tasks;
 import hudson.plugins.git.browser.GitRepositoryBrowser;
 import hudson.plugins.git.extensions.GitClientConflictException;
 import hudson.plugins.git.extensions.GitClientType;
@@ -74,6 +76,8 @@ import static com.google.common.collect.Lists.newArrayList;
 import static hudson.Util.*;
 import static hudson.init.InitMilestone.JOB_LOADED;
 import static hudson.init.InitMilestone.PLUGINS_STARTED;
+import hudson.plugins.git.browser.BitbucketWeb;
+import hudson.plugins.git.browser.GitLab;
 import hudson.plugins.git.browser.GithubWeb;
 import static hudson.scm.PollingResult.*;
 import hudson.util.LogTaskListener;
@@ -322,10 +326,33 @@ public class GitSCM extends GitSCMBackwardCompatibility {
         this.browser = browser;
     }
 
+    private static final String HOSTNAME_MATCH
+            = "([\\w\\d[-.]]+)" // hostname
+            ;
+    private static final String REPOSITORY_PATH_MATCH
+            = "/*" // Zero or more slashes as start of repository path
+            + "(.+?)" // repository path without leading slashes
+            + "(?:[.]git)?" // optional '.git' suffix
+            + "/*" // optional trailing '/'
+            ;
+
     private static final Pattern[] URL_PATTERNS = {
-        Pattern.compile("https://github[.]com/([^/]+/[^/]+?)([.]git)*/*"),
-        Pattern.compile("(?:git@)?github[.]com:([^/]+/[^/]+?)([.]git)*/*"),
-        Pattern.compile("ssh://(?:git@)?github[.]com/([^/]+/[^/]+?)([.]git)*/*"),
+        /* URL style - like https://github.com/jenkinsci/git-plugin */
+        Pattern.compile(
+        "(?:\\w+://)" // protocol (scheme)
+        + "(?:.+@)?" // optional username/password
+        + HOSTNAME_MATCH
+        + "(?:[:][\\d]+)?" // optional port number (only honored by git for ssh:// scheme)
+        + "/" // separator between hostname and repository path - '/'
+        + REPOSITORY_PATH_MATCH
+        ),
+        /* Alternate ssh style - like git@github.com:jenkinsci/git-plugin */
+        Pattern.compile(
+        "(?:git@)" // required username (only optional if local username is 'git')
+        + HOSTNAME_MATCH
+        + ":" // separator between hostname and repository path - ':'
+        + REPOSITORY_PATH_MATCH
+        )
     };
 
     @Override public RepositoryBrowser<?> guessBrowser() {
@@ -334,21 +361,33 @@ public class GitSCM extends GitSCMBackwardCompatibility {
             for (RemoteConfig config : remoteRepositories) {
                 for (URIish uriIsh : config.getURIs()) {
                     String uri = uriIsh.toString();
-                    // TODO make extensible by introducing an abstract GitRepositoryBrowserDescriptor
                     for (Pattern p : URL_PATTERNS) {
                         Matcher m = p.matcher(uri);
                         if (m.matches()) {
-                            webUrls.add("https://github.com/" + m.group(1) + "/");
+                            webUrls.add("https://" + m.group(1) + "/" + m.group(2) + "/");
                         }
                     }
                 }
             }
         }
-        if (webUrls.size() == 1) {
-            return new GithubWeb(webUrls.iterator().next());
-        } else {
+        if (webUrls.isEmpty()) {
             return null;
         }
+        if (webUrls.size() == 1) {
+            String url = webUrls.iterator().next();
+            if (url.startsWith("https://bitbucket.org/")) {
+                return new BitbucketWeb(url);
+            }
+            if (url.startsWith("https://gitlab.com/")) {
+                return new GitLab(url, "");
+            }
+            if (url.startsWith("https://github.com/")) {
+                return new GithubWeb(url);
+            }
+            return null;
+        }
+        LOGGER.log(Level.INFO, "Multiple browser guess matches for {0}", remoteRepositories);
+        return null;
     }
 
     public boolean isCreateAccountBasedOnEmail() {
@@ -757,8 +796,14 @@ public class GitSCM extends GitSCMBackwardCompatibility {
             String ucCredentialsId = uc.getCredentialsId();
             if (ucCredentialsId != null) {
                 String url = getParameterString(uc.getUrl(), environment);
-                List<StandardUsernameCredentials> urlCredentials = CredentialsProvider.lookupCredentials(StandardUsernameCredentials.class, project,
-                                        ACL.SYSTEM, URIRequirementBuilder.fromUri(url).build());
+                List<StandardUsernameCredentials> urlCredentials = CredentialsProvider.lookupCredentials(
+                        StandardUsernameCredentials.class,
+                        project,
+                        project instanceof Queue.Task
+                                ? Tasks.getDefaultAuthenticationOf((Queue.Task)project)
+                                : ACL.SYSTEM,
+                        URIRequirementBuilder.fromUri(url).build()
+                );
                 CredentialsMatcher ucMatcher = CredentialsMatchers.withId(ucCredentialsId);
                 CredentialsMatcher idMatcher = CredentialsMatchers.allOf(ucMatcher, GitClient.CREDENTIALS_MATCHER);
                 StandardUsernameCredentials credentials = CredentialsMatchers.firstOrNull(urlCredentials, idMatcher);
