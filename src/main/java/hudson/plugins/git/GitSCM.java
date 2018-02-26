@@ -141,7 +141,7 @@ public class GitSCM extends GitSCMBackwardCompatibility {
     }
 
     public static List<UserRemoteConfig> createRepoList(String url, String credentialsId) {
-        List<UserRemoteConfig> repoList = new ArrayList<UserRemoteConfig>();
+        List<UserRemoteConfig> repoList = new ArrayList<>();
         repoList.add(new UserRemoteConfig(url, null, null, credentialsId));
         return repoList;
     }
@@ -613,7 +613,8 @@ public class GitSCM extends GitSCMBackwardCompatibility {
         return requiresWorkspaceForPolling(new EnvVars());
     }
 
-    private boolean requiresWorkspaceForPolling(EnvVars environment) {
+    /* Package protected for test access */
+    boolean requiresWorkspaceForPolling(EnvVars environment) {
         for (GitSCMExtension ext : getExtensions()) {
             if (ext.requiresWorkspaceForPolling()) return true;
         }
@@ -1219,7 +1220,7 @@ public class GitSCM extends GitSCMBackwardCompatibility {
         if (!buildDataAlreadyPresent) {
             if (build.getActions(AbstractScmTagAction.class).isEmpty()) {
                 // only add the tag action if we can be unique as AbstractScmTagAction has a fixed UrlName
-                // so only one of the actions is addressible by users
+                // so only one of the actions is addressable by users
                 build.addAction(new GitTagAction(build, workspace, revToBuild.revision));
             }
 
