@@ -58,7 +58,7 @@ import org.eclipse.jgit.lib.PersonIdent;
 import org.jenkinsci.plugins.gitclient.GitClient;
 import static org.junit.Assert.*;
 import static org.hamcrest.Matchers.*;
-import static org.junit.Assume.*;
+import static org.junit.Assume.assumeThat;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -565,9 +565,7 @@ public class GitPublisherTest extends AbstractGitProject {
         assertFalse("otherCommit2 in otherbranch", testGitClient.revList("otherbranch").contains(otherCommit2));
     }
 
-    /**
-     * Fix push to remote when skipTag is enabled
-     */
+    /* Fix push to remote when skipTag is enabled */
     @Issue("JENKINS-17769")
     @Test
     public void testMergeAndPushWithSkipTagEnabled() throws Exception {
@@ -577,7 +575,7 @@ public class GitPublisherTest extends AbstractGitProject {
                 remoteConfigs(),
                 Collections.singletonList(new BranchSpec("*")),
                 false, Collections.<SubmoduleConfig>emptyList(),
-                null, null, new ArrayList<GitSCMExtension>());
+                null, null, new ArrayList<>());
         scm.getExtensions().add(new PreBuildMerge(new UserMergeOptions("origin", "integration", null, null)));
         scm.getExtensions().add(new LocalBranch("integration"));
         project.setScm(scm);
